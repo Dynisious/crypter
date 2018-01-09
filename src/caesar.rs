@@ -7,6 +7,8 @@ use std::io::{Read, Write, Result, Error, ErrorKind};
 
 /// The length of the alphabet being encrypted (`A-Z`).
 const ALPHA_LEN: u8 = 26;
+/// The maximum `key` value for this cypher.
+pub const MAX_KEY: u8 = 25;
 
 /// Applies the Caesar Shift cypher to the input.
 ///
