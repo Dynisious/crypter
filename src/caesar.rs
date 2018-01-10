@@ -3,7 +3,8 @@
 //! Author --- daniel.bechaz@gmail.com  
 //! Last Modified --- 2018/01/09
 
-use std::io::{Read, Write, Result, Error, ErrorKind};
+use std::iter::Iterator;
+use std::io::{Write, Result, Error, ErrorKind};
 
 /// The length of the alphabet being encrypted (`A-Z`).
 const ALPHA_LEN: u8 = 26;
@@ -23,30 +24,34 @@ pub const MAX_KEY: u8 = 25;
 /// # Errors
 ///
 /// An error of "Bad Key." will be returned if `key` is not in the range `[0, 26)`.
-pub fn encrypt(key: u8, is: impl Read, os: &mut Write) -> Result<()> {
+pub fn encrypt(key: u8, is: impl Iterator<Item = u8>, os: &mut Write) -> Result<()> {
     if key < ALPHA_LEN {
         //The key is a valid shift.
-        //A one byte buffer needed to pass to `os.write`.
-        let mut buf = [0; 1];
-        
-        //Iterate through all the input bytes.
-        for byte in is.bytes() {
-            //Unwrap the byte.
-            buf[0] = byte?;
+        //The temporary buffer.
+        let mut buf = [0];
+        let mut encrypt = |byte: u8| {
+            //Place the byte in the temporary buffer.
+            buf[0] = byte;
             
+            //If the byte is ascii-alphabetic, it gets encrypted.
             if buf[0].is_ascii_alphabetic() {
-                //The byte is alphabetical.
-                //Apply the Caesar Shift.
+                //Shift the byte.
                 buf[0] = buf[0].to_ascii_uppercase() + key;
                 
-                //If the shift went passed `Z`, wrap it around.
                 if buf[0] > b'Z' {
+                    //The byte was pushed out of the ascii-alphabetic range.
+                    //Wrap the byte around to `A`.
                     buf[0] -= ALPHA_LEN;
                 }
             }
             
             //Write the byte out.
-            os.write_all(&mut buf)?;
+            os.write_all(&buf)
+        };
+        
+        for byte in is {
+            //Encrypt the byte.
+            encrypt(byte)?;
         }
         
         Ok(())
@@ -70,30 +75,34 @@ pub fn encrypt(key: u8, is: impl Read, os: &mut Write) -> Result<()> {
 /// # Notes
 ///
 /// Values of `a-z` will not be changed by this function.
-pub fn decrypt(key: u8, is: impl Read, os: &mut Write) -> Result<()> {
+pub fn decrypt(key: u8, is: impl Iterator<Item = u8>, os: &mut Write) -> Result<()> {
     if key < ALPHA_LEN {
         //The key is a valid shift.
-        //A one byte buffer needed to pass to `os.write`.
-        let mut buf = [0; 1];
-        
-        //Iterate through all the input bytes.
-        for byte in is.bytes() {
-            //Unwrap the byte.
-            buf[0] = byte?;
+        //The temporary buffer.
+        let mut buf = [0];
+        let mut decrypt = |byte: u8| {
+            //Place the byte in the temporary buffer.
+            buf[0] = byte;
             
+            //If the byte is ascii-alphabetic, it gets decrypted.
             if buf[0].is_ascii_uppercase() {
-                //The byte was shifted.
-                //Reverse the Caesar Shift.
+                //Shift the byte.
                 buf[0] -= key;
                 
-                //If the shift went passed `A`, wrap it around.
                 if buf[0] < b'A' {
+                    //The byte was pushed out of the ascii-alphabetic range.
+                    //Wrap the byte around to `Z`.
                     buf[0] += ALPHA_LEN;
                 }
             }
             
             //Write the byte out.
-            os.write_all(&mut buf)?;
+            os.write_all(&buf)
+        };
+        
+        for byte in is {
+            //Decrypt the byte.
+            decrypt(byte)?;
         }
         
         Ok(())
@@ -106,34 +115,34 @@ pub fn decrypt(key: u8, is: impl Read, os: &mut Write) -> Result<()> {
 #[cfg(test)]
 mod tests {
     const PLAIN: &str = "The red fox, jumped, over the lazy dog! 0123456789";
-    const CYPHER: &str = "DRO BON PYH, TEWZON, YFOB DRO VKJI NYQ! 0123456789";
+    const CYPHER: &[u8] = b"DRO BON PYH, TEWZON, YFOB DRO VKJI NYQ! 0123456789";
     const KEY: u8 = 10;
     
     #[test]
     fn test_encrypt() {
-        let mut cypher = String::with_capacity(PLAIN.len());
+        let mut cypher = Vec::with_capacity(PLAIN.len());
         
-        ::caesar::encrypt(0, PLAIN.as_bytes(), unsafe { cypher.as_mut_vec() })
+        ::caesar::encrypt(0, PLAIN.as_bytes().iter().map(Clone::clone), &mut cypher)
             .expect("Failed to encrypt plain-text.");
-        assert_eq!(cypher, PLAIN.to_uppercase(), "Incorrect cypher-text.");
+        assert_eq!(cypher, PLAIN.to_uppercase().as_bytes(), "Incorrect cypher-text.");
         
         cypher.clear();
-        ::caesar::encrypt(KEY, PLAIN.as_bytes(), unsafe { cypher.as_mut_vec() })
+        ::caesar::encrypt(KEY, PLAIN.as_bytes().iter().map(Clone::clone), &mut cypher)
             .expect("Failed to encrypt plain-text.");
         assert_eq!(cypher, CYPHER, "Incorrect cypher-text.");
     }
     
     #[test]
     fn test_decrypt() {
-        let mut plain = String::with_capacity(PLAIN.len());
+        let mut plain = Vec::with_capacity(PLAIN.len());
         
-        ::caesar::decrypt(0, PLAIN.to_uppercase().as_bytes(), unsafe { plain.as_mut_vec() })
+        ::caesar::decrypt(0, PLAIN.to_uppercase().as_bytes().iter().map(Clone::clone), &mut plain)
             .expect("Failed to decrypt cypher-text.");
-        assert_eq!(plain, PLAIN.to_uppercase(), "Incorrect plain-text.");
+        assert_eq!(plain, PLAIN.to_uppercase().as_bytes(), "Incorrect plain-text.");
         
         plain.clear();
-        ::caesar::decrypt(KEY, CYPHER.as_bytes(), unsafe { plain.as_mut_vec() })
+        ::caesar::decrypt(KEY, CYPHER.iter().map(Clone::clone), &mut plain)
             .expect("Failed to decrypt cypher-text.");
-        assert_eq!(plain, PLAIN.to_uppercase(), "Incorrect plain-text.");
+        assert_eq!(plain, PLAIN.to_uppercase().as_bytes(), "Incorrect plain-text.");
     }
 }

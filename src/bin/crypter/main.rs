@@ -1,23 +1,21 @@
 
 extern crate crypter;
+extern crate hex;
+
+mod caesar;
+mod hexout;
+mod xor;
 
 use std::iter::Skip;
 use std::env::{args, Args};
-
-mod caesar;
 
 fn main() {
     let mut args = args().skip(1);
     match args.next() {
         None => help(),
-        Some(command) => {
-            let command = command.to_lowercase();
-            
-            if command == "help" {
-                help()
-            } else {
-                index(command, args)
-            }
+        Some(command) => match command.as_str() {
+            "help" => help(),
+            _ => index(command, args)
         }
     }
 }
@@ -40,8 +38,7 @@ For additional help try:
 fn index(command: String, args: Skip<Args>) {
     match command.as_str() {
         "caesar" => caesar::index(args),
-        _ => eprintln!("Command {} not recognised, try:
-    crypter help", command
-        )
+        "xor" => xor::index(args),
+        _ => eprintln!("Command {} not recognised, try: crypter help", command)
     }
 }

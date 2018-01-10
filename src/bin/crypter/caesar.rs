@@ -2,45 +2,72 @@
 use std::iter::Skip;
 use std::env::Args;
 use std::fs::File;
-use std::io::{stdin, stdout};
+use std::io::{Read, stdin, stdout};
 use crypter::caesar;
 
 pub fn index(mut args: Skip<Args>) {
-    match args.next().expect("caesar requires a `key`. Try \"crypter caesar --help\"").to_lowercase().as_str() {
-        "--help" => help(),
-        key => {
-            let key = key.parse()
+    let key = match args.next() {
+        Some(arg) => match arg.as_str() {
+            "--help" => return help(),
+            key => match key.parse()
                 .map_err(|_| ())
                 .and_then(|key| if key <= caesar::MAX_KEY {
                     Ok(key)
                 } else {
                     Err(())
-                }).expect("Key was not a number from [0, 25]. Try \"crypter caesar --help\"");
-            
-            match args.next().expect("Caesar expected an <option>. Try \"crypter caesar --help\"").to_lowercase().as_str() {
-                "-e" | "--encrypt" => match args.next() {
-                    None => {
-                        println!("Now encrypting each line of input.");
-                        caesar::encrypt(key, stdin(), &mut stdout())
-                            .unwrap_or_else(|e| eprintln!("Failed while encrypting. {}", e));
-                    },
-                    Some(in_file) => File::open(in_file)
-                        .and_then(|in_file| caesar::encrypt(key, in_file, &mut stdout()))
-                        .unwrap_or_else(|e| eprintln!("Failed while encrypting. {}", e))
-                },
-                "-d" | "--decrypt" => match args.next() {
-                    None => {
-                        println!("Now encrypting each line of input.");
-                        caesar::decrypt(key, stdin(), &mut stdout())
-                            .unwrap_or_else(|e| eprintln!("Failed while decrypting. {}", e));
-                    },
-                    Some(in_file) => File::open(in_file)
-                        .and_then(|in_file| caesar::decrypt(key, in_file, &mut stdout()))
-                        .unwrap_or_else(|e| eprintln!("Failed while decrypting. {}", e))
-                },
-                op => eprintln!("Unexpected option {}. Try \"crypter caesar --help\"", op)
+                }) {
+                Ok(key) => key,
+                Err(_) => return eprintln!("Key was not a number from [0, 25]. Try: crypter caesar --help")
             }
-        }
+        },
+        None => return eprintln!("caesar requires a `key`. Try: crypter caesar --help")
+    };
+    
+    match args.next() {
+        Some(arg) => match arg.as_str() {
+            "-e" | "--encrypt" => match args.next() {
+                None => {
+                    eprintln!("Now encrypting each line of input.");
+                    caesar::encrypt(
+                        key,
+                        stdin().bytes()
+                            .take_while(|byte| byte.is_ok())
+                            .map(|byte| byte.unwrap()),
+                        &mut stdout()
+                    ).unwrap_or_else(|e| eprintln!("Failed while encrypting. {}", e));
+                },
+                Some(in_file) => File::open(in_file)
+                    .and_then(|in_file| caesar::encrypt(
+                        key,
+                        in_file.bytes()
+                            .take_while(Result::<u8, _>::is_ok)
+                            .map(Result::<u8, _>::unwrap),
+                        &mut stdout()
+                    )).unwrap_or_else(|e| eprintln!("Failed while encrypting. {}", e))
+            },
+            "-d" | "--decrypt" => match args.next() {
+                None => {
+                    eprintln!("Now encrypting each line of input.");
+                    caesar::decrypt(
+                        key,
+                        stdin().bytes()
+                            .take_while(Result::<u8, _>::is_ok)
+                            .map(Result::<u8, _>::unwrap),
+                        &mut stdout()
+                    ).unwrap_or_else(|e| eprintln!("Failed while decrypting. {}", e));
+                },
+                Some(in_file) => File::open(in_file)
+                    .and_then(|in_file| caesar::decrypt(
+                        key,
+                        in_file.bytes()
+                            .take_while(Result::<u8, _>::is_ok)
+                            .map(Result::<u8, _>::unwrap),
+                        &mut stdout())
+                    ).unwrap_or_else(|e| eprintln!("Failed while decrypting. {}", e))
+            },
+            arg => eprintln!("Unexpected option {}. Try: crypter caesar --help", arg)
+        },
+        None => eprintln!("caesar expected an <option>. Try: crypter caesar --help")
     }
 }
 
