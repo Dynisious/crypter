@@ -1,52 +1,113 @@
+//! The `caesar` module defines the Caesar Shift encryption algorithm.
+//!
+//! Author --- daniel.bechaz@gmail.com  
+//! Last Modified --- 2018/01/09
 
-use std::io::{Read, Write, Result, Error, ErrorKind};
+use std::iter::Iterator;
+use std::io::{Write, Result, Error, ErrorKind};
 
-pub const DEFAULT_BUF_LEN: usize = 10;
+/// The length of the alphabet being encrypted (`A-Z`).
+const ALPHA_LEN: u8 = 26;
+/// The maximum `key` value for this cypher.
+pub const MAX_KEY: u8 = 25;
 
-pub fn encrypt(key: u8, is: impl Read, os: &mut Write) -> Result<()> {
-    if key < 26 {
-        let mut buf = [0; 1];
-        
-        for byte in is.bytes() {
-            buf[0] = byte?;
+/// Applies the Caesar Shift cypher to the input.
+///
+/// Only characters from the range `a-z` or `A-Z` will be affected.  
+/// Input values of `a-z` will be converted to `A-Z` before encryption.
+///
+/// # Params
+/// key --- A value from `[0, 26)` which specifies the shift to apply.  
+/// is --- The input stream of bytes to encrypt.  
+/// os --- The writer to output the encrypted bytes to.
+///
+/// # Errors
+///
+/// An error of "Bad Key." will be returned if `key` is not in the range `[0, 26)`.
+pub fn encrypt(key: u8, is: impl Iterator<Item = u8>, os: &mut Write) -> Result<()> {
+    if key < ALPHA_LEN {
+        //The key is a valid shift.
+        //The temporary buffer.
+        let mut buf = [0];
+        let mut encrypt = |byte: u8| {
+            //Place the byte in the temporary buffer.
+            buf[0] = byte;
             
+            //If the byte is ascii-alphabetic, it gets encrypted.
             if buf[0].is_ascii_alphabetic() {
+                //Shift the byte.
                 buf[0] = buf[0].to_ascii_uppercase() + key;
                 
                 if buf[0] > b'Z' {
-                    buf[0] -= 26;
+                    //The byte was pushed out of the ascii-alphabetic range.
+                    //Wrap the byte around to `A`.
+                    buf[0] -= ALPHA_LEN;
                 }
             }
             
-            os.write_all(&mut buf)?;
+            //Write the byte out.
+            os.write_all(&buf)
+        };
+        
+        for byte in is {
+            //Encrypt the byte.
+            encrypt(byte)?;
         }
         
         Ok(())
     } else {
+        //The key is not a valid shift.
         Err(Error::new(ErrorKind::Other, "Bad Key."))
     }
 }
 
-pub fn decrypt(key: u8, is: impl Read, os: &mut Write) -> Result<()> {
-    if key < 26 {
-        let mut buf = [0; 1];
-        
-        for byte in is.bytes() {
-            buf[0] = byte?;
+/// The inverse of [`encrypt`](fn.encrypt.html).
+///
+/// # Params
+/// key --- A value from `[0, 26)` which specifies the shift to reverse.  
+/// is --- The input stream of bytes to decrypt.  
+/// os --- The writer to output the decrypted bytes to.
+///
+/// # Errors
+///
+/// An error of "Bad Key." will be returned if `key` is not in the range `[0, 26)`.
+///
+/// # Notes
+///
+/// Values of `a-z` will not be changed by this function.
+pub fn decrypt(key: u8, is: impl Iterator<Item = u8>, os: &mut Write) -> Result<()> {
+    if key < ALPHA_LEN {
+        //The key is a valid shift.
+        //The temporary buffer.
+        let mut buf = [0];
+        let mut decrypt = |byte: u8| {
+            //Place the byte in the temporary buffer.
+            buf[0] = byte;
             
-            if buf[0].is_ascii_alphabetic() {
-                buf[0] = buf[0].to_ascii_uppercase() - key;
+            //If the byte is ascii-alphabetic, it gets decrypted.
+            if buf[0].is_ascii_uppercase() {
+                //Shift the byte.
+                buf[0] -= key;
                 
                 if buf[0] < b'A' {
-                    buf[0] += 26;
+                    //The byte was pushed out of the ascii-alphabetic range.
+                    //Wrap the byte around to `Z`.
+                    buf[0] += ALPHA_LEN;
                 }
             }
             
-            os.write_all(&mut buf)?;
+            //Write the byte out.
+            os.write_all(&buf)
+        };
+        
+        for byte in is {
+            //Decrypt the byte.
+            decrypt(byte)?;
         }
         
         Ok(())
     } else {
+        //The key is not a valid shift.
         Err(Error::new(ErrorKind::Other, "Bad Key."))
     }
 }
@@ -54,33 +115,34 @@ pub fn decrypt(key: u8, is: impl Read, os: &mut Write) -> Result<()> {
 #[cfg(test)]
 mod tests {
     const PLAIN: &str = "The red fox, jumped, over the lazy dog! 0123456789";
-    const CYPHER: &str = "DRO BON PYH, TEWZON, YFOB DRO VKJI NYQ! 0123456789";
+    const CYPHER: &[u8] = b"DRO BON PYH, TEWZON, YFOB DRO VKJI NYQ! 0123456789";
+    const KEY: u8 = 10;
     
     #[test]
     fn test_encrypt() {
-        let mut cypher = String::with_capacity(PLAIN.len());
+        let mut cypher = Vec::with_capacity(PLAIN.len());
         
-        ::caesar::encrypt(0, PLAIN.as_bytes(), unsafe { cypher.as_mut_vec() })
+        ::caesar::encrypt(0, PLAIN.as_bytes().iter().map(Clone::clone), &mut cypher)
             .expect("Failed to encrypt plain-text.");
-        assert_eq!(cypher, PLAIN.to_uppercase(), "Incorrect cypher-text.");
+        assert_eq!(cypher, PLAIN.to_uppercase().as_bytes(), "Incorrect cypher-text.");
         
         cypher.clear();
-        ::caesar::encrypt(10, PLAIN.as_bytes(), unsafe { cypher.as_mut_vec() })
+        ::caesar::encrypt(KEY, PLAIN.as_bytes().iter().map(Clone::clone), &mut cypher)
             .expect("Failed to encrypt plain-text.");
         assert_eq!(cypher, CYPHER, "Incorrect cypher-text.");
     }
     
     #[test]
     fn test_decrypt() {
-        let mut plain = String::with_capacity(PLAIN.len());
+        let mut plain = Vec::with_capacity(PLAIN.len());
         
-        ::caesar::decrypt(0, PLAIN.as_bytes(), unsafe { plain.as_mut_vec() })
+        ::caesar::decrypt(0, PLAIN.to_uppercase().as_bytes().iter().map(Clone::clone), &mut plain)
             .expect("Failed to decrypt cypher-text.");
-        assert_eq!(plain, PLAIN.to_uppercase(), "Incorrect plain-text.");
+        assert_eq!(plain, PLAIN.to_uppercase().as_bytes(), "Incorrect plain-text.");
         
         plain.clear();
-        ::caesar::decrypt(10, CYPHER.as_bytes(), unsafe { plain.as_mut_vec() })
+        ::caesar::decrypt(KEY, CYPHER.iter().map(Clone::clone), &mut plain)
             .expect("Failed to decrypt cypher-text.");
-        assert_eq!(plain, PLAIN.to_uppercase(), "Incorrect plain-text.");
+        assert_eq!(plain, PLAIN.to_uppercase().as_bytes(), "Incorrect plain-text.");
     }
 }
